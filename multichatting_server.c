@@ -165,10 +165,12 @@ int main(void)
 
         if (FD_ISSET(roomlist[room_index].user_list[user_index].user_sockfd, &readfd))
         {
+          // 메시지를 받는 부분
           memset(BUFF, '\0', sizeof(BUFF));
           tempsockfd = roomlist[room_index].user_list[user_index].user_sockfd;
           msgsize = read(tempsockfd, BUFF, sizeof(BUFF));
 
+          // 메시지가 없다면 처리
           if (msgsize <= 0)
           {
 
@@ -190,13 +192,25 @@ int main(void)
               roomlist[room_index].user_count--;
             }
           }
+
+          // 메시지가 있다면 처리
           else
           {
             printf("Receive Message=>%s\n", BUFF, msgsize);
-            for (temp_user_count = 0; temp_user_count < roomlist[room_index].user_count; temp_user_count++)
-            {
-              msgsize = strlen(BUFF);
-              write(roomlist[room_index].user_list[temp_user_count].user_sockfd, BUFF, msgsize);
+
+            // 방장이 "/ls"를 보내면 참여자 리스트 전송
+            char* cmd_list = strstr(BUFF, "/ls"); // list participants
+            if (cmd_list != NULL) {
+              // Do something
+            }
+            // 일반 메세지가 왔을 때
+            else {
+              // 방에 있는 모든 참가자들에게 메시지 전달
+              for (temp_user_count = 0; temp_user_count < roomlist[room_index].user_count; temp_user_count++)
+              {
+                msgsize = strlen(BUFF);
+                write(roomlist[room_index].user_list[temp_user_count].user_sockfd, BUFF, msgsize);
+              }
             }
           }
         }
