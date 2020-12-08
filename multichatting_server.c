@@ -6,11 +6,14 @@
 #include <stdio.h>
 
 #define SERVER_PORT 5001
+#define MAX_NAME_LENGTH 30
 
 struct user_node
 {
+  char name[MAX_NAME_LENGTH];
   int user_sockfd;
 };
+
 struct room_node
 {
   char room_name[10];
