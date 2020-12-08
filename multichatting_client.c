@@ -45,7 +45,6 @@ int main(int argc, char *argv[])
   name[strlen(name)] = '\0';
   while (1)
   {
-
     /*\C1\A2\BC?\E6\B9\F8? \C0?\C2*/
     printf(" Enter Room Number(ex=> 1or 2 or 3)=>");
     room_number = fgetc(stdin);
@@ -66,7 +65,8 @@ int main(int argc, char *argv[])
   memset(msg, '\0', sizeof(msg)); // flush
   msg[0] = room_number;           // 0: 방번호
 
-  for (temp_index = 0; temp_index < strlen(name); temp_index++) {
+  for (temp_index = 0; temp_index < strlen(name); temp_index++)
+  {
     msg[temp_index + 1] = name[temp_index]; // 1~쭉 이름
   }
 
@@ -126,7 +126,18 @@ int main(int argc, char *argv[])
       sscanf(msg, "%s", sender);
       char* body = strstr(msg, "\n");
 
-      if (body != NULL) {
+      if (strcmp(sender, "SYSTEM") == 0)
+      {
+        if (body != NULL && strstr(body, "KICKED") != NULL)
+        {
+          printf("Oops, You were kicked from the room T.T\n");
+          close(connect_fd);
+          exit(0);
+        }
+      }
+
+      if (body != NULL)
+      {
         printf("[%s]: ", sender);
         puts(body);
       }
@@ -146,7 +157,7 @@ int main(int argc, char *argv[])
       msg[strlen(msg)] = '\0';
 
       /*\C0?\A7\BA\AF\B0\E6*/
-      if (strstr(msg, CHANGE_NAME) != NULL)
+      if (strstr(msg+strlen(name)+1, CHANGE_NAME) != NULL)
       {
         printf("Write your change name: ");
         memset(name, '\0', sizeof(name));

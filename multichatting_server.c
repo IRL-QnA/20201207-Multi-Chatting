@@ -204,12 +204,36 @@ int main(void)
 
             // 방장이 "/ls"를 보내면 참여자 리스트 전송
             char *cmd_list = strstr(BUFF, "/ls"); // list participants
+            char *cmd_kick = strstr(BUFF, "/k");  // kick
             if (cmd_list != NULL)
             {
               // BUFF => 참여자 리스트
               printf("Show participants\n");
               Participants(roomlist, room_index, BUFF);
               write(roomlist[room_index].user_list[user_index].user_sockfd, BUFF, strlen(BUFF));
+            }
+            if (user_index == 0 && cmd_kick != NULL)
+            {
+              char kickWho_name[MAX_NAME_LENGTH];
+              int kickWho_idx;
+              memset(kickWho_name, '\0', sizeof(kickWho_name));
+
+              sscanf(cmd_kick + 3, "%s", kickWho_name);
+              printf("Kicking user : %s\n", kickWho_name);
+
+              kickWho_idx = GetUserindex(roomlist, room_index, kickWho_name);
+              if (kickWho_idx >= 0)
+              {
+                strcpy(BUFF, "SYSTEM\nKICKED");
+                write(roomlist[room_index].user_list[kickWho_idx].user_sockfd, BUFF, sizeof(BUFF));
+                close(roomlist[room_index].user_list[kickWho_idx].user_sockfd);
+
+                roomlist[room_index].user_count--;
+                for (int user_number = kickWho_idx; user_number < roomlist[room_index].user_count; user_number++)
+                {
+                  roomlist[room_index].user_list[user_number] = roomlist[room_index].user_list[user_number + 1];
+                }
+              }
             }
             // 일반 메세지가 왔을 때
             else
@@ -284,6 +308,20 @@ int Accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen)
     printf("Success Accept\n");
   }
   return result;
+}
+
+int GetUserindex(const struct room_node roomlist[], const int room_number, const char *username)
+{
+  for (int user_number = 0; user_number < roomlist[room_number].user_count; user_number++)
+  {
+    if (strcmp(roomlist[room_number].user_list[user_number].name, username) == 0)
+    {
+      printf("Found username: %s\n", username);
+      return user_number;
+    }
+  }
+  printf("User %s not found.\n", username);
+  return -1;
 }
 
 void Participants(const struct room_node roomlist[], const int room_number, char *buffer)
