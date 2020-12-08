@@ -167,8 +167,12 @@ int main(void)
         {
           // 메시지를 받는 부분
           memset(BUFF, '\0', sizeof(BUFF));
+
           tempsockfd = roomlist[room_index].user_list[user_index].user_sockfd;
           msgsize = read(tempsockfd, BUFF, sizeof(BUFF));
+
+          // 전송자 이름을 추출
+          sscanf(BUFF, "%s", roomlist[room_index].user_list[user_index].name);
 
           // 메시지가 없다면 처리
           if (msgsize <= 0)
@@ -196,7 +200,7 @@ int main(void)
           // 메시지가 있다면 처리
           else
           {
-            printf("Receive Message=>%s\n", BUFF, msgsize);
+            printf("Receive Message=>%s\n===END===\n", BUFF, msgsize);
 
             // 방장이 "/ls"를 보내면 참여자 리스트 전송
             char* cmd_list = strstr(BUFF, "/ls"); // list participants

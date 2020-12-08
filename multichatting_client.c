@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
   int msgsize;
 
   char name[MAX] = {0};
+  char sender[MAX] = {0}; // 전송자
   char room_number;
   char msg[1024] = {0};
 
@@ -61,12 +62,12 @@ int main(int argc, char *argv[])
     }
   }
 
-  memset(msg, '\0', sizeof(msg));
-  msg[0] = room_number;
+  // @Hepheir 내가 접속한
+  memset(msg, '\0', sizeof(msg)); // flush
+  msg[0] = room_number;           // 0: 방번호
 
-  for (temp_index = 0; temp_index < strlen(name); temp_index++)
-  {
-    msg[temp_index + 1] = name[temp_index];
+  for (temp_index = 0; temp_index < strlen(name); temp_index++) {
+    msg[temp_index + 1] = name[temp_index]; // 1~쭉 이름
   }
 
   /*(1) ?\B6\F3\C0?\F0? \B1?\BC\B3\C1\A4*/
@@ -109,6 +110,7 @@ int main(int argc, char *argv[])
 
     select(connect_fd + 1, &readfd, NULL, NULL, NULL);
 
+    // 서버에서 메시지를 받은경우
     if (FD_ISSET(connect_fd, &readfd))
     {
       memset(msg, '\0', sizeof(msg));
@@ -116,14 +118,31 @@ int main(int argc, char *argv[])
       msgsize = read(connect_fd, msg, sizeof(msg));
       if (msgsize <= 0)
         continue;
-      printf("From=>%s \n", msg);
+
+      // 혹시모를 대비
+      msg[sizeof(msg)-1] = '\0';
+
+      // 이름과 내용을 파싱
+      sscanf(msg, "%s", sender);
+      char* body = strstr(msg, "\n");
+
+      if (body != NULL) {
+        printf("[%s]: ", sender);
+        puts(body);
+      }
     }
+
+    // 내가 메시지 보내는 경우
     if (FD_ISSET(0, &readfd))
     {
 
       memset(msg, '\0', sizeof(msg));
 
-      fgets(msg, 1024, stdin);
+      // 사용자 메시지 이전에 이름을 먼저 삽입
+      strcpy(msg, name);
+      msg[strlen(name)] = '\n';
+
+      fgets(msg+strlen(name)+1, 1024, stdin); // 1 더하는 이유는 '\n'도 1칸을 차지해서.
       msg[strlen(msg)] = '\0';
 
       /*\C0?\A7\BA\AF\B0\E6*/
@@ -156,9 +175,8 @@ int main(int argc, char *argv[])
         printf("*  you can exit your browser                         *\n");
         printf("***************************************************\n");
       }
-      msg[strlen(msg) - 1] = '[';
-      strcat(msg, name);
-      msg[strlen(msg) - 1] = ']';
+
+      // 메시지 전송
       msgsize = strlen(msg);
       write(connect_fd, msg, msgsize);
     }
