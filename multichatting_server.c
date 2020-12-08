@@ -203,12 +203,17 @@ int main(void)
             printf("Receive Message=>%s\n===END===\n", BUFF, msgsize);
 
             // 방장이 "/ls"를 보내면 참여자 리스트 전송
-            char* cmd_list = strstr(BUFF, "/ls"); // list participants
-            if (cmd_list != NULL) {
-              // Do something
+            char *cmd_list = strstr(BUFF, "/ls"); // list participants
+            if (cmd_list != NULL)
+            {
+              // BUFF => 참여자 리스트
+              printf("Show participants\n");
+              Participants(roomlist, room_index, BUFF);
+              write(roomlist[room_index].user_list[user_index].user_sockfd, BUFF, strlen(BUFF));
             }
             // 일반 메세지가 왔을 때
-            else {
+            else
+            {
               // 방에 있는 모든 참가자들에게 메시지 전달
               for (temp_user_count = 0; temp_user_count < roomlist[room_index].user_count; temp_user_count++)
               {
@@ -279,4 +284,20 @@ int Accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen)
     printf("Success Accept\n");
   }
   return result;
+}
+
+void Participants(const struct room_node roomlist[], const int room_number, char *buffer)
+{
+  memset(buffer, '\0', sizeof(buffer));
+
+  // 클라이언트에서 입력받는 방식을 "전송자\n메시지" 형식으로 했기 때문에, 내 이름을 추가해줌.
+  strcat(buffer, "SYSTEM\nParticipants:\n*"); // 방장 이름 왼쪽에 별표시
+  for (int user_number = 0; user_number < roomlist[room_number].user_count; user_number++)
+  {
+    strcat(buffer, roomlist[room_number].user_list[user_number].name);
+    strcat(buffer, "\n");
+  }
+
+  printf("Built String:\n%s\n", buffer);
+  return;
 }
