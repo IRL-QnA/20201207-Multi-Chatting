@@ -9,8 +9,9 @@
 #include <errno.h>
 #include <sys/types.h>
 
-#define myport 3000
-#define MAX 30
+#include "includes/message.h"
+
+#define myport 5000
 
 char *CHANGE_NAME = "ChangeName";
 char *EXIT = "Exit";
@@ -20,29 +21,24 @@ int Socket(int family, int type, int protocol);
 void Connect(int sockfd, const struct sockaddr *servaddr, socklen_t addrlen);
 
 int main(int argc, char *argv[])
-{ // argc: \C0?\C2\C7\D2\C0\CE\C0\DA\C0\C7 \B0\B9\BC\F6, argv \C0\CE\C0?\A6\B4\E3\B4\C2 \B9ò÷
+{ // argc: \C0?\C2\C7\D2\C0\CE\C0\DA\C0\C7 \B0\B9\BC\F6, argv \C0\CE\C0?\A6\B4\E3\B4\C2 \B9ï¿½ï¿½
   struct sockaddr_in connect_addr;
   int connect_fd;
-  int msgsize;
+  int buffersize;
 
-  char name[MAX] = {0};
-  char sender[MAX] = {0}; // Àü¼ÛÀÚ
   char room_number;
-  char msg[1024] = {0};
+  char user_name[MESSAGE_FROM_MAX_LENGTH] = {0};
+  char buffer[MESSAGE_CONTENT_MAX_LENGTH] = {0};
+  MessageNode message;
 
   fd_set readfd;
-  int temp_index;
 
   printf("****************************************************\n");
   printf("************Welcome to Chatting Browser*************\n");
   printf("****************************************************\n");
 
   printf(" Enter User Name=> ");
-  memset(name, '\0', sizeof(name));
-
-  /*\BB\E7\BF\EB\C0\DA \B4\EB?\B8\ED \C0?\C2?\B8\AE*/
-  fgets(name, 30, stdin);
-  name[strlen(name)] = '\0';
+  fgets(user_name, MESSAGE_CONTENT_MAX_LENGTH, stdin);
   while (1)
   {
     /*\C1\A2\BC?\E6\B9\F8? \C0?\C2*/
@@ -61,14 +57,10 @@ int main(int argc, char *argv[])
     }
   }
 
-  // @Hepheir ³»°¡ Á¢¼ÓÇÑ
-  memset(msg, '\0', sizeof(msg)); // flush
-  msg[0] = room_number;           // 0: ¹æ¹øÈ£
-
-  for (temp_index = 0; temp_index < strlen(name); temp_index++)
-  {
-    msg[temp_index + 1] = name[temp_index]; // 1~Âß ÀÌ¸§
-  }
+  // @Hepheir ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  memset(buffer, '\0', sizeof(buffer)); // flush
+  buffer[0] = room_number;           // 0: ï¿½ï¿½ï¿½È£
+  strcat(buffer, user_name);
 
   /*(1) ?\B6\F3\C0?\F0? \B1?\BC\B3\C1\A4*/
   connect_fd = Socket(AF_INET, SOCK_STREAM, 0);
@@ -80,21 +72,21 @@ int main(int argc, char *argv[])
   /*\BC\AD\B9\F6\C1\A2\BC\D3*/
   Connect(connect_fd, (struct sockaddr *)&connect_addr, sizeof(connect_addr));
 
-  msgsize = sizeof(msg);
-  write(connect_fd, msg, msgsize);
-  memset(msg, '\0', sizeof(msg));
+  buffersize = sizeof(buffer);
+  write(connect_fd, buffer, buffersize);
+  memset(buffer, '\0', sizeof(buffer));
 
   /*?\C6\C3 \BC\AD\B9\F6\BF\A1 \B4\EB\C7\D1 \C1\A2\BC\D3 \B0\E1\B0\FA ?\C0\CE*/
-  read(connect_fd, msg, sizeof(msg));
+  read(connect_fd, buffer, sizeof(buffer));
 
-  if (!strcmp(msg, "Connect OK"))
+  if (!strcmp(buffer, "Connect OK"))
   {
     printf("************Server Connection Success*************\n");
     printf("************ Start Chatting Program  *************\n");
   }
-  if (!strcmp(msg, "User Count Overflow Error"))
+  if (!strcmp(buffer, "User Count Overflow Error"))
   {
-    printf("%s\n", msg);
+    printf("%s\n", buffer);
     exit(1);
   }
 
@@ -110,74 +102,50 @@ int main(int argc, char *argv[])
 
     select(connect_fd + 1, &readfd, NULL, NULL, NULL);
 
-    // ¼­¹ö¿¡¼­ ¸Þ½ÃÁö¸¦ ¹ÞÀº°æ¿ì
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     if (FD_ISSET(connect_fd, &readfd))
     {
-      memset(msg, '\0', sizeof(msg));
+      memset(buffer, '\0', sizeof(buffer));
 
-      msgsize = read(connect_fd, msg, sizeof(msg));
-      if (msgsize <= 0)
-        continue;
+      buffersize = read(connect_fd, buffer, sizeof(buffer));
+      if (buffersize <= 0) continue;
 
-      // È¤½Ã¸ð¸¦ ´ëºñ
-      msg[sizeof(msg)-1] = '\0';
+      clearMessage(&message);
+      parseMessage(buffer, &message);
 
-      // ÀÌ¸§°ú ³»¿ëÀ» ÆÄ½Ì
-      sscanf(msg, "%s", sender);
-      char* body = strstr(msg, "\n");
-
-      if (strcmp(sender, "SYSTEM") == 0)
+      if (strcmp(message.from, "SYSTEM") == 0)
       {
-        if (body != NULL && strstr(body, "KICKED") != NULL)
-        {
-          printf("Oops, You were kicked from the room T.T\n");
-          close(connect_fd);
-          exit(0);
-        }
+        // TODO : ëª…ë ¹ì— ë”°ë¥¸ ì²˜ë¦¬ (í‚¥, ë°´, í…œë°´ ë“±)
       }
 
-      if (body != NULL)
-      {
-        printf("[%s]: ", sender);
-        puts(body);
-      }
+      prtMessage(&message);
     }
 
-    // ³»°¡ ¸Þ½ÃÁö º¸³»´Â °æ¿ì
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     if (FD_ISSET(0, &readfd))
     {
+      memset(buffer, '\0', sizeof(buffer));
+      fgets(buffer, MESSAGE_CONTENT_MAX_LENGTH, stdin);
 
-      memset(msg, '\0', sizeof(msg));
-
-      // »ç¿ëÀÚ ¸Þ½ÃÁö ÀÌÀü¿¡ ÀÌ¸§À» ¸ÕÀú »ðÀÔ
-      strcpy(msg, name);
-      msg[strlen(name)] = '\n';
-
-      fgets(msg+strlen(name)+1, 1024, stdin); // 1 ´õÇÏ´Â ÀÌÀ¯´Â '\n'µµ 1Ä­À» Â÷ÁöÇØ¼­.
-      msg[strlen(msg)] = '\0';
-
-      /*\C0?\A7\BA\AF\B0\E6*/
-      if (strstr(msg+strlen(name)+1, CHANGE_NAME) != NULL)
+      if (strstr(buffer, CHANGE_NAME) != NULL)
       {
         printf("Write your change name: ");
-        memset(name, '\0', sizeof(name));
-
-        /*\BB\E7\BF\EB\C0\DA \B4\EB?\B8\ED \C0?\C2?\B8\AE*/
-        fgets(name, 30, stdin);
-        name[strlen(name)] = '\0';
+        memset(user_name, '\0', sizeof(user_name));
+        fgets(user_name, MESSAGE_FROM_MAX_LENGTH, stdin);
       }
 
       /*\C1\BE\B7\E1*/
-      if (strstr(msg, EXIT) != NULL)
+      if (strstr(buffer, EXIT) != NULL)
       {
-        sprintf(msg, "Good Bye~!!\n %s is exit.", name);
-        write(connect_fd, msg, msgsize);
+        sprintf(message.content, "Good Bye~!!\n %s is exit.", user_name);
+        dumpMessage(&message, buffer, MESSAGE_CONTENT_MAX_LENGTH);
+        write(connect_fd, buffer, buffersize);
         close(connect_fd);
         exit(0);
       }
 
       /*\B5\B5\BF\F2\B8\BB*/
-      if (strstr(msg, HELP) != NULL)
+      if (strstr(buffer, HELP) != NULL)
       {
         printf("***************************************************\n");
         printf("*  write 'ChangeName' on your chatting window *\n");
@@ -187,13 +155,14 @@ int main(int argc, char *argv[])
         printf("***************************************************\n");
       }
 
-      // ¸Þ½ÃÁö Àü¼Û
-      msgsize = strlen(msg);
-      write(connect_fd, msg, msgsize);
+      // ï¿½Þ½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+      buffersize = strlen(buffer);
+      write(connect_fd, buffer, buffersize);
     }
   }
   return 0;
 }
+
 void Connect(int sockfd, const struct sockaddr *servaddr, socklen_t addrlen)
 {
   int result = 0;
@@ -209,6 +178,7 @@ void Connect(int sockfd, const struct sockaddr *servaddr, socklen_t addrlen)
     printf("Success Connecting\n");
   }
 }
+
 int Socket(int family, int type, int protocol)
 {
   int result = 0;

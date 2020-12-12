@@ -21,6 +21,10 @@ struct room_node
   int user_count;
 };
 
+#include "includes/message.h"
+#include "includes/server_util.h"
+#include "includes/server_command.h"
+
 int Socket(int family, int type, int protocol);
 void Bind(int sockfd, const struct sockaddr *socketaddr, socklen_t addrlen);
 void Listen(int sockfd, int backlog);
@@ -67,6 +71,8 @@ int main(void)
   Listen(server_socket, 0);
   FD_ZERO(&readfd);
   maxfd = server_socket;
+
+  printf("Entering main loop...\n");
 
   while (1)
   {
@@ -162,23 +168,22 @@ int main(void)
     {
       for (user_index = 0; user_index < roomlist[room_index].user_count; user_index++)
       {
-
-        if (FD_ISSET(roomlist[room_index].user_list[user_index].user_sockfd, &readfd))
+        // 각 방, 각 유저에 대해 한 번씩 거치는 과정
+        struct room_node room = roomlist[room_index];
+        struct user_node user = roomlist[room_index].user_list[user_index];
+        MessageNode message;
+        
+        if (FD_ISSET(user.user_sockfd, &readfd))
         {
-          // 메시지를 받는 부분
+          // 소켓으로부터 메시지 평문 읽기
           memset(BUFF, '\0', sizeof(BUFF));
-
-          tempsockfd = roomlist[room_index].user_list[user_index].user_sockfd;
-          msgsize = read(tempsockfd, BUFF, sizeof(BUFF));
-
-          // 전송자 이름을 추출
-          sscanf(BUFF, "%s", roomlist[room_index].user_list[user_index].name);
+          msgsize = read(user.user_sockfd, BUFF, sizeof(BUFF));
 
           // 메시지가 없다면 처리
           if (msgsize <= 0)
           {
 
-            if (user_index == roomlist[room_index].user_count)
+            if (user_index == room.user_count)
             {
               close(roomlist[room_index].user_list[user_index].user_sockfd);
               roomlist[room_index].user_count--;
@@ -200,41 +205,42 @@ int main(void)
           // 메시지가 있다면 처리
           else
           {
-            printf("Receive Message=>%s\n===END===\n", BUFF, msgsize);
+            // 읽은 메시지 평문을 해석 (parsing)
+            clearMessage(&message);
+            parseMessage(BUFF, &message);
 
-            // 방장이 "/ls"를 보내면 참여자 리스트 전송
-            char *cmd_list = strstr(BUFF, "/ls"); // list participants
-            char *cmd_kick = strstr(BUFF, "/k");  // kick
-            if (cmd_list != NULL)
+            // 유저의 이름 정보 갱신
+            strcpy(user.name, message.from);
+
+            // [콘솔] 수신한 메시지 확인
+            printf("Receive Message\n");
+            prtMessage(&message);
+            
+            char *cmd;
+
+            // 참여자 리스트 출력
+            if ((cmd = strstr(BUFF, LIST)) != NULL)
             {
-              // BUFF => 참여자 리스트
-              printf("Show participants\n");
-              Participants(roomlist, room_index, BUFF);
-              write(roomlist[room_index].user_list[user_index].user_sockfd, BUFF, strlen(BUFF));
+              memset(BUFF, '\0', sizeof(BUFF));
+              listParticipants(message.content, room);
             }
-            if (user_index == 0 && cmd_kick != NULL)
-            {
-              char kickWho_name[MAX_NAME_LENGTH];
-              int kickWho_idx;
-              memset(kickWho_name, '\0', sizeof(kickWho_name));
 
-              sscanf(cmd_kick + 3, "%s", kickWho_name);
-              printf("Kicking user : %s\n", kickWho_name);
+            // 참여자 강퇴
+            if ((cmd = strstr(BUFF, KICK)) != NULL && user_index == 0) {
 
-              kickWho_idx = GetUserindex(roomlist, room_index, kickWho_name);
-              if (kickWho_idx >= 0)
-              {
-                strcpy(BUFF, "SYSTEM\nKICKED");
-                write(roomlist[room_index].user_list[kickWho_idx].user_sockfd, BUFF, sizeof(BUFF));
-                close(roomlist[room_index].user_list[kickWho_idx].user_sockfd);
-
-                roomlist[room_index].user_count--;
-                for (int user_number = kickWho_idx; user_number < roomlist[room_index].user_count; user_number++)
-                {
-                  roomlist[room_index].user_list[user_number] = roomlist[room_index].user_list[user_number + 1];
-                }
-              }
             }
+
+            // 참여자 밴
+            if ((cmd = strstr(BUFF, BAN)) != NULL && user_index == 0) {
+              
+            }
+
+            // 참여자 일정시간 밴
+            if ((cmd = strstr(BUFF, TEMPBAN)) != NULL && user_index == 0) {
+
+            }
+
+
             // 일반 메세지가 왔을 때
             else
             {
@@ -294,6 +300,7 @@ void Listen(int sockfd, int backlog)
     printf("Success Listening\n");
   }
 }
+
 int Accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen)
 {
   int result = 0;
@@ -308,34 +315,4 @@ int Accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen)
     printf("Success Accept\n");
   }
   return result;
-}
-
-int GetUserindex(const struct room_node roomlist[], const int room_number, const char *username)
-{
-  for (int user_number = 0; user_number < roomlist[room_number].user_count; user_number++)
-  {
-    if (strcmp(roomlist[room_number].user_list[user_number].name, username) == 0)
-    {
-      printf("Found username: %s\n", username);
-      return user_number;
-    }
-  }
-  printf("User %s not found.\n", username);
-  return -1;
-}
-
-void Participants(const struct room_node roomlist[], const int room_number, char *buffer)
-{
-  memset(buffer, '\0', sizeof(buffer));
-
-  // 클라이언트에서 입력받는 방식을 "전송자\n메시지" 형식으로 했기 때문에, 내 이름을 추가해줌.
-  strcat(buffer, "SYSTEM\nParticipants:\n*"); // 방장 이름 왼쪽에 별표시
-  for (int user_number = 0; user_number < roomlist[room_number].user_count; user_number++)
-  {
-    strcat(buffer, roomlist[room_number].user_list[user_number].name);
-    strcat(buffer, "\n");
-  }
-
-  printf("Built String:\n%s\n", buffer);
-  return;
 }
