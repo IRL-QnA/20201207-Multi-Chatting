@@ -14,12 +14,7 @@ struct user_node
   int user_sockfd;
 };
 
-struct room_node
-{
-  char room_name[10];
-  struct user_node user_list[5];
-  int user_count;
-};
+#include "includes/server_room.h"
 
 #include "includes/message.h"
 #include "includes/server_util.h"
@@ -49,14 +44,13 @@ int main(void)
   int user_index;
   int tempsockfd;
   int temp_user_count;
+  
+  struct room_node room;
+  struct user_node user;
 
-  strcpy(roomlist[0].room_name, "room1");
-  strcpy(roomlist[1].room_name, "room2");
-  strcpy(roomlist[2].room_name, "room3");
-
-  roomlist[0].user_count = 0;
-  roomlist[1].user_count = 0;
-  roomlist[2].user_count = 0;
+  initRoom(roomlist+0, "Room1");
+  initRoom(roomlist+1, "Room2");
+  initRoom(roomlist+2, "Room3");
 
   /*(1) \BC\AD\B9\F6 \B1⺻\BC\B3\C1\A4*/
   server_socket = Socket(AF_INET, SOCK_STREAM, 0);
@@ -72,22 +66,19 @@ int main(void)
   FD_ZERO(&readfd);
   maxfd = server_socket;
 
-  printf("Entering main loop...\n");
-
   while (1)
   {
     /*(3) \BC\AD\B9\F6\BF\A1 \C1\A2\BC\D3\C7\D1 Ŭ\B6\F3\C0̾\F0Ʈ \BC\D2\C4ϱ\E2\BC\FA\C0ڸ\A6 FD_SET\BF\A1 \BC\B3\C1\A4 */
 
     FD_SET(server_socket, &readfd);
 
-    for (room_index = 0; room_index < 3; room_index++)
-    {
-      for (user_index = 0; user_index < roomlist[room_index].user_count; user_index++)
-      {
-        tempsockfd = roomlist[room_index].user_list[user_index].user_sockfd;
-        FD_SET(tempsockfd, &readfd);
-        if (tempsockfd > maxfd)
-          maxfd = tempsockfd;
+    for (room_index = 0; room_index < 3; room_index++) {
+      room = roomlist[room_index];
+      for (user_index = 0; user_index < room.user_count; user_index++) {
+        user = room.user_list[user_index];
+        FD_SET(user.user_sockfd, &readfd);
+        if (user.user_sockfd > maxfd)
+          maxfd = user.user_sockfd;
       }
     }
     maxfd = maxfd + 1;
@@ -169,7 +160,7 @@ int main(void)
       for (user_index = 0; user_index < roomlist[room_index].user_count; user_index++)
       {
         // 각 방, 각 유저에 대해 한 번씩 거치는 과정
-        struct room_node room = roomlist[room_index];
+        room = roomlist[room_index];
         struct user_node user = roomlist[room_index].user_list[user_index];
         MessageNode message;
         
@@ -185,20 +176,18 @@ int main(void)
 
             if (user_index == room.user_count)
             {
-              close(roomlist[room_index].user_list[user_index].user_sockfd);
-              roomlist[room_index].user_count--;
+              close(roomuser_list[user_index].user_sockfd);
+              roomuser_count--;
             }
-            else if (user_index < roomlist[room_index].user_count)
+            else if (user_index < roomuser_count)
             {
-              close(roomlist[room_index].user_list[user_index].user_sockfd);
+              close(roomuser_list[user_index].user_sockfd);
 
-              for (temp_user_count = user_index; temp_user_count < roomlist[room_index].user_count; temp_user_count++)
+              for (temp_user_count = user_index; temp_user_count < roomuser_count; temp_user_count++)
               {
-
-                roomlist[room_index].user_list[temp_user_count] =
-                    roomlist[room_index].user_list[temp_user_count + 1];
+                room.user_list[temp_user_count] = room.user_list[temp_user_count + 1];
               }
-              roomlist[room_index].user_count--;
+              roomuser_count--;
             }
           }
 
@@ -208,6 +197,7 @@ int main(void)
             // 읽은 메시지 평문을 해석 (parsing)
             clearMessage(&message);
             parseMessage(BUFF, &message);
+            memset(BUFF, '\0', sizeof(BUFF));
 
             // 유저의 이름 정보 갱신
             strcpy(user.name, message.from);
@@ -216,39 +206,92 @@ int main(void)
             printf("Receive Message\n");
             prtMessage(&message);
             
-            char *cmd;
+            bool is_room_owner = (user_index == 0);
+            bool is_cmd = isCommand(&message);
+
+            // 일반 메시지
+            if (!is_cmd) {
+              dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+              for (temp_user_count = 0; temp_user_count < roomuser_count; temp_user_count++)
+              {
+                write(room.user_list[temp_user_count].user_sockfd, BUFF, strlen(BUFF));
+              }
+            }
 
             // 참여자 리스트 출력
-            if ((cmd = strstr(BUFF, LIST)) != NULL)
-            {
-              memset(BUFF, '\0', sizeof(BUFF));
+            else if (strstr(message.content, LIST) != NULL) {
+              clearMessage(&message);
+
+              strcpy(message.from, "SYSTEM");
               listParticipants(message.content, room);
+              printf("---%s---\n", message.content);
+
+              dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+              write(user.user_sockfd, BUFF, strlen(BUFF));
+              close(user.user_sockfd);
             }
 
             // 참여자 강퇴
-            if ((cmd = strstr(BUFF, KICK)) != NULL && user_index == 0) {
+            else if (strstr(message.content, KICK) != NULL && is_room_owner) {
+              struct user_node target;
+              if (findUserByName(room, nextParam(message.content), &target) == 0) {
+                // 강퇴당한 사람에게 메시지 전송
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                strcpy(message.content, "You were kicked.");
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
 
+                kickUser(room, target);
+
+                // 방장에게 메시지 전송
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                sprintf(message.content, "User %s was kicked.", target.name);
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
+              }
             }
 
             // 참여자 밴
-            if ((cmd = strstr(BUFF, BAN)) != NULL && user_index == 0) {
-              
+            else if (strstr(message.content, BAN) != NULL && is_room_owner) {
+              struct user_node target;
+              if (findUserByName(room, nextParam(message.content), &target) == 0) {
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                strcpy(message.content, "You were banned.");
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
+                
+                banUser(room, target);
+
+                // 방장에게 메시지 전송
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                sprintf(message.content, "User %s was banned.", target.name);
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
+              }
             }
 
             // 참여자 일정시간 밴
-            if ((cmd = strstr(BUFF, TEMPBAN)) != NULL && user_index == 0) {
+            else if (strstr(message.content, TEMPBAN) != NULL && is_room_owner) {
+              struct user_node target;
+              if (findUserByName(room, nextParam(message.content), &target) == 0) {
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                strcpy(message.content, "You were temp banned.");
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
+                
+                tempBanUser(room, target);
 
-            }
-
-
-            // 일반 메세지가 왔을 때
-            else
-            {
-              // 방에 있는 모든 참가자들에게 메시지 전달
-              for (temp_user_count = 0; temp_user_count < roomlist[room_index].user_count; temp_user_count++)
-              {
-                msgsize = strlen(BUFF);
-                write(roomlist[room_index].user_list[temp_user_count].user_sockfd, BUFF, msgsize);
+                // 방장에게 메시지 전송
+                clearMessage(&message);
+                strcpy(message.from, "SYSTEM");
+                sprintf(message.content, "User %s was temp banned.", target.name);
+                dumpMessage(BUFF, MESSAGE_FROM_MAX_LENGTH, &message);
+                write(target.user_sockfd, BUFF, strlen(BUFF));
               }
             }
           }

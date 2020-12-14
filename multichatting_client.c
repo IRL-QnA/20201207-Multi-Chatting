@@ -125,20 +125,24 @@ int main(int argc, char *argv[])
     if (FD_ISSET(0, &readfd))
     {
       memset(buffer, '\0', sizeof(buffer));
-      fgets(buffer, MESSAGE_CONTENT_MAX_LENGTH, stdin);
+      clearMessage(&message);
 
-      if (strstr(buffer, CHANGE_NAME) != NULL)
+      strncpy(message.from, user_name, MESSAGE_FROM_MAX_LENGTH);
+      fgets(message.content, MESSAGE_CONTENT_MAX_LENGTH, stdin);
+
+      if (strstr(message.content, CHANGE_NAME) != NULL)
       {
         printf("Write your change name: ");
         memset(user_name, '\0', sizeof(user_name));
         fgets(user_name, MESSAGE_FROM_MAX_LENGTH, stdin);
+        sprintf(message.content, "Change name to: %s", user_name);
+        dumpMessage(buffer, MESSAGE_CONTENT_MAX_LENGTH, &message);
+        write(connect_fd, buffer, buffersize);
       }
-
-      /*\C1\BE\B7\E1*/
-      if (strstr(buffer, EXIT) != NULL)
+      else if (strstr(message.content, EXIT) != NULL)
       {
         sprintf(message.content, "Good Bye~!!\n %s is exit.", user_name);
-        dumpMessage(&message, buffer, MESSAGE_CONTENT_MAX_LENGTH);
+        dumpMessage(buffer, MESSAGE_CONTENT_MAX_LENGTH, &message);
         write(connect_fd, buffer, buffersize);
         close(connect_fd);
         exit(0);
@@ -155,9 +159,10 @@ int main(int argc, char *argv[])
         printf("***************************************************\n");
       }
 
-      // �޽��� ����
-      buffersize = strlen(buffer);
-      write(connect_fd, buffer, buffersize);
+      else {
+        dumpMessage(buffer, MESSAGE_CONTENT_MAX_LENGTH, &message);
+        write(connect_fd, buffer, strlen(buffer));
+      }
     }
   }
   return 0;

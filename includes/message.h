@@ -17,12 +17,12 @@ void clearMessage(MessageNode *message) {
   return;
 }
 
-void dumpMessage(const MessageNode *message, char *string, int max_length) {
+void dumpMessage(char *string, int max_length, const MessageNode *message) {
   // from와 content문자열을 받아 평문을 완성하여 dst로 전달
   memset(string, '\0', max_length);
-  strncat(string, message->from, max_length);
-  strncat(string, SEPERATOR, max_length);
-  strncat(string, message->content, max_length);
+  strcat(string, message->from);
+  strcat(string, SEPERATOR);
+  strcat(string, message->content);
   return;
 }
 
@@ -46,9 +46,6 @@ void parseMessage(const char *string, MessageNode *message) {
       pointer++;
     }
   }
-  // SEPERATOR가 위치하는 값이 NULL로 변경 되었기 때문에
-  // from를 아래와 같이 지정해도, 문자열 출력시 이름만 나타나게 되어
-  // 문제없이 사용이 가능하다.
   strncpy(message->from, string, MESSAGE_FROM_MAX_LENGTH);
   strncpy(message->content, pointer, MESSAGE_CONTENT_MAX_LENGTH);
   return;

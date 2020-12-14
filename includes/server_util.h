@@ -1,4 +1,7 @@
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
 int GetUserindex(const struct room_node roomlist[], const int room_number, const char *username)
 {
@@ -26,14 +29,14 @@ struct user_node popUser(struct room_node room, int user_index) {
 
 // void pushUser() {};
 
-void findUserByName(const struct room_node room, const char* username, struct user_node *user) {
+int findUserByName(const struct room_node room, const char* user_name, struct user_node *user) {
   for (int user_number = 0; user_number < room.user_count; user_number++) {
-    if (strcmp(room.user_list[user_number].name, username) == 0) {
-      printf("Found username: %s");
+    if (strcmp(room.user_list[user_number].name, user_name) == 0) {
+      printf("Found username: %s", user_name);
       *user = popUser(room, user_number);
-      return;
+      return 0;
     }
   }
-  printf("User %s not found.\n", username);
-  return;
+  printf("User %s not found.\n", user_name);
+  return 1;
 }
