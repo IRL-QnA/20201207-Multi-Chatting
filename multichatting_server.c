@@ -203,8 +203,8 @@ int main(void)
             printf("Receive Message=>%s\n===END===\n", BUFF, msgsize);
 
             // 방장이 "/ls"를 보내면 참여자 리스트 전송
-            char *cmd_list = strstr(BUFF, "/ls"); // list participants
-            char *cmd_kick = strstr(BUFF, "/k");  // kick
+            char *cmd_list = strstr(BUFF, "/list"); // list participants
+            char *cmd_kick = strstr(BUFF, "/kick");  // kick
             if (cmd_list != NULL)
             {
               // BUFF => 참여자 리스트
