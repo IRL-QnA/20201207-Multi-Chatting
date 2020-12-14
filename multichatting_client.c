@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
       strcpy(msg, name);
       msg[strlen(name)] = '\n';
 
+      fflush(stdin);
       fgets(msg + strlen(name) + 1, 1024, stdin);
       msg[strlen(msg)] = '\0';
 
