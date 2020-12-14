@@ -4,9 +4,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <time.h>
+
 
 #define SERVER_PORT 5001
 #define MAX_NAME_LENGTH 30
+#define ETERNITY 999999999
 
 struct user_node
 {
@@ -19,6 +22,12 @@ struct room_node
   char room_name[10];
   struct user_node user_list[5];
   int user_count;
+};
+
+struct ban_node
+{
+  char name[MAX_NAME_LENGTH];
+  time_t expires;
 };
 
 int Socket(int family, int type, int protocol);
@@ -46,6 +55,10 @@ int main(void)
   int tempsockfd;
   int temp_user_count;
 
+  time_t current_time;
+  struct ban_node banned_user_list[20]; // 최대 20명까지만 밴 가능함에 유의
+  int banned_user_count = 0;
+
   strcpy(roomlist[0].room_name, "room1");
   strcpy(roomlist[1].room_name, "room2");
   strcpy(roomlist[2].room_name, "room3");
@@ -70,6 +83,19 @@ int main(void)
 
   while (1)
   {
+    current_time = time(NULL);
+
+    // 기간 만료된 밴 풀어주기
+    for (temp_user_count = 0; temp_user_count < banned_user_count; temp_user_count++) {
+      if (banned_user_list[temp_user_count].expires < current_time) {
+        while (temp_user_count < banned_user_count-1) {
+          banned_user_list[temp_user_count] = banned_user_list[temp_user_count+1];
+          temp_user_count++;
+        }
+        break;
+      }
+    }
+
     /*(3) \BC\AD\B9\F6\BF\A1 \C1\A2\BC\D3\C7\D1 Ŭ\B6\F3\C0̾\F0Ʈ \BC\D2\C4ϱ\E2\BC\FA\C0ڸ\A6 FD_SET\BF\A1 \BC\B3\C1\A4 */
 
     FD_SET(server_socket, &readfd);
@@ -108,6 +134,24 @@ int main(void)
       if (BUFF[0] == '1')
       {
         printf("Login Room1 Count:%d\n", roomlist[0].user_count);
+
+        // 밴된 유저인지 검사
+        bool is_banned = false;
+
+        for (temp_user_count = 0; temp_user_count < banned_user_count; temp_user_count++) {
+          if (strcmp(banned_user_list[temp_user_count].name, BUFF+1) != NULL) {
+            is_banned = true;
+            break;
+          }
+        }
+
+        if (is_banned) {
+          printf("Banned User, login refused.\n");
+          strcpy(BUFF, "You were banned.");
+          write(client_socket, BUFF, strlen(BUFF));
+          close(client_socket);
+          continue;
+        }
 
         if (roomlist[0].user_count == 5)
         {
@@ -205,6 +249,8 @@ int main(void)
             // 방장이 "/ls"를 보내면 참여자 리스트 전송
             char *cmd_list = strstr(BUFF, "/list"); // list participants
             char *cmd_kick = strstr(BUFF, "/kick");  // kick
+            char *cmd_ban = strstr(BUFF, "/ban");
+
             if (cmd_list != NULL)
             {
               // BUFF => 참여자 리스트
@@ -230,6 +276,34 @@ int main(void)
 
                 roomlist[room_index].user_count--;
                 for (int user_number = kickWho_idx; user_number < roomlist[room_index].user_count; user_number++)
+                {
+                  roomlist[room_index].user_list[user_number] = roomlist[room_index].user_list[user_number + 1];
+                }
+              }
+            }
+            // 밴
+            if (user_index == 0 && cmd_ban != NULL)
+            {
+              char target_name[MAX_NAME_LENGTH];
+              int target_index;
+              memset(target_name, '\0', sizeof(target_name));
+
+              sscanf(cmd_ban + 3, "%s", target_name);
+              printf("Banning user : %s\n", target_name);
+
+              strcpy(banned_user_list[banned_user_count].name, target_name);
+              banned_user_list[banned_user_count].expires = ETERNITY;
+              banned_user_count++;
+
+              target_index = GetUserindex(roomlist, room_index, target_name);
+              if (target_index >= 0)
+              {
+                strcpy(BUFF, "SYSTEM\nKICKED");
+                write(roomlist[room_index].user_list[target_index].user_sockfd, BUFF, sizeof(BUFF));
+                close(roomlist[room_index].user_list[target_index].user_sockfd);
+
+                roomlist[room_index].user_count--;
+                for (int user_number = target_index; user_number < roomlist[room_index].user_count; user_number++)
                 {
                   roomlist[room_index].user_list[user_number] = roomlist[room_index].user_list[user_number + 1];
                 }
