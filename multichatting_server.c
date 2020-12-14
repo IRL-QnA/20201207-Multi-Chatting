@@ -264,7 +264,7 @@ int main(void)
               int kickWho_idx;
               memset(kickWho_name, '\0', sizeof(kickWho_name));
 
-              sscanf(cmd_kick + 3, "%s", kickWho_name);
+              sscanf(cmd_kick + strlen("/kick") + 1, "%s", kickWho_name);
               printf("Kicking user : %s\n", kickWho_name);
 
               kickWho_idx = GetUserindex(roomlist, room_index, kickWho_name);
@@ -288,7 +288,7 @@ int main(void)
               int target_index;
               memset(target_name, '\0', sizeof(target_name));
 
-              sscanf(cmd_ban + 3, "%s", target_name);
+              sscanf(cmd_ban + strlen("/ban") + 1, "%s", target_name);
               printf("Banning user : %s\n", target_name);
 
               strcpy(banned_user_list[banned_user_count].name, target_name);
