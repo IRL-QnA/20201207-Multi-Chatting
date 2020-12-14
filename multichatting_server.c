@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdbool.h>
 
 
 #define SERVER_PORT 5001
